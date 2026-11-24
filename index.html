@@ -1,1 +1,591 @@
-<!doctype html><title>lebanon store</title>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لبنان استور — التطبيق الموحد لإدارة الشقق</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  *{font-family:'Tajawal',system-ui,sans-serif}
+  body{background:#f4efec;color:#251f21}
+  .card{background:#fff;border:1px solid #eae9ea;border-radius:16px}
+  .btn{background:#0f766e;color:#fff;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}
+  .btn2{background:#fff;color:#0f766e;border:1.5px solid #0f766e;border-radius:10px;padding:9px 14px;font-weight:700;cursor:pointer}
+  .btn3{background:#fff;color:#585254;border:1px solid #eae9ea;border-radius:10px;padding:9px 14px;cursor:pointer}
+  .inp{width:100%;padding:9px 12px;border:1px solid #eae9ea;border-radius:10px;background:#fff}
+  label{display:block;font-size:13px;color:#585254;margin:8px 0 3px}
+  .chip{display:inline-block;background:#eef6f4;color:#0f766e;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700}
+  .chip.warn{background:#fdf0e7;color:#b45309}
+  .chip.bad{background:#fde8ea;color:#c81e2b}
+  .tabbtn{flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:700;color:#8a8486;cursor:pointer;border-radius:12px}
+  .tabbtn.on{background:#0f766e;color:#fff}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+  .modal>div{background:#fff;width:100%;max-width:520px;max-height:92vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:20px}
+  .alertRow{display:flex;gap:10px;align-items:flex-start;background:#fdf6ec;border:1px solid #f2e3c6;border-radius:12px;padding:10px 12px;margin-top:8px;font-size:14px}
+  table.rep{width:100%;border-collapse:collapse;font-size:13px}
+  table.rep th,table.rep td{border:1px solid #eae9ea;padding:7px 6px;text-align:center}
+  table.rep th{background:#f8f5f3;font-weight:700}
+  .calcell{min-height:74px;border:1px solid #eee;border-radius:8px;padding:3px;font-size:11px;background:#fff}
+  .calbar{border-radius:6px;padding:1px 5px;margin-top:2px;font-size:10px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qrCard{width:340px;border:2px solid #0f766e;border-radius:18px;padding:20px;margin:14px auto;background:#fff;page-break-after:always;break-after:page}
+  @media print{ body *{visibility:hidden} #printArea,#printArea *{visibility:visible} #printArea{position:absolute;inset:0} .no-print{display:none!important} }
+  .toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:#251f21;color:#fff;padding:10px 20px;border-radius:999px;font-size:14px;z-index:99}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modalRoot"></div>
+<script>
+// ============ البيانات ============
+const LS_KEY='lb_unified_v1';
+const PHOTO_BASE='https://media.doubao.com/space/api/box/stream/download/all_by_mount_point/';
+const U201_PHOTOS=[
+  {src:PHOTO_BASE+'WSB4bACJNoDKNtxMTniljEotgXd',alt:'الصالة'},
+  {src:PHOTO_BASE+'Dvc2bb9j8oFYjfxvPpFl0OaKgWf',alt:'الصالة وطاولة الطعام'},
+  {src:PHOTO_BASE+'Qtl3bodAkokshSxEDxWlPddCgPd',alt:'غرفة النوم الرئيسية'},
+  {src:PHOTO_BASE+'XXxxbWIrEoEvEcxW4QblSV2Lgbb',alt:'غرفة نوم ثانية'},
+  {src:PHOTO_BASE+'ThmmbbIVCo1s1PxwjCZlyygagAe',alt:'المطبخ'}
+];
+const EXP_CATS=['نظافة','كهرباء','مياه','غاز','إنترنت','صيانة','مستلزمات','مرتب بواب','إعلانات','أخرى'];
+const CHANNELS=['واتساب','مباشر','Airbnb','Booking','سمسار','بواب','فيسبوك','عميل سابق','أخرى'];
+const BK_STATUS=['مؤكد','مقدم مدفوع','انتهى','ملغي'];
+const LIC_STATUS=['مرخص','قيد الإجراء','غير متحقق','غير مرخص','لا ينطبق'];
+const DOC_STATUS=['مكتملة','ناقص مستندات','قيد المراجعة','غير متحقق'];
+const YESNO=['نعم','لا','قيد المراجعة','لا ينطبق'];
+
+function defaultSettings(){return {
+  wa:'201002900588', waLabel:'+20 10 029 00588', phone:'+201002900588',
+  address:'26 إسراء المعلمين (برج 11)، ميدان لبنان، المهندسين، الجيزة',
+  checkIn:'12 ظهراً', checkOut:'يُنسق مع المضيف عند التأكيد', minNights:3,
+  policyNote:'الإقامة للعائلات أو الشباب المحترمين؛ يُمنع استقبال زوار من الجنس الآخر عند إقامة الشباب، مع الالتزام بعدم إزعاج الجيران، ويُرجى إبراز الهوية عند الدخول.',
+  priceNote:'الأسعار استرشادية وتتأكد على الواتساب حسب الموسم ومدة الإقامة.',
+  payNote:'لا يوجد دفع إلكتروني مقدماً؛ التسوية نقداً أو بالتحويل بعد الاتفاق، وتُقبل ج.م والدولار والريال السعودي.',
+  wifiSsid:'', wifiPass:'', applianceNote:'', instapay:'', walletName:'', walletNum:'',
+  pinHash:'',pinSalt:''
+};}
+function defaultApartments(){return [
+  {id:'u105',name:'شقة 105',beds:3,baths:3,status:'متاحة',clean:'clean',ownership:'rent',landlordRent:0,priceNight:0,priceMonth:0,priceYear:0,photos:[],desc:'ثلاث غرف نوم وثلاثة حمامات.',tags:['3 غرف','3 حمامات'],license:{platform:'Airbnb',owner:'قيد المراجعة',compound:'قيد المراجعة',hh:'قيد الإجراء',num:'',submitted:'',issued:'',expiry:'',docs:'غير متحقق',next:''}},
+  {id:'u201',name:'شقة 201',beds:3,baths:3,status:'متاحة',clean:'clean',ownership:'rent',landlordRent:0,priceNight:0,priceMonth:0,priceYear:0,photos:U201_PHOTOS,desc:'صالة واسعة بأثاث مريح وشاشة وتكييف، ثلاث غرف نوم ببياضات نظيفة، مطبخ مجهز وطاولة طعام عائلية.',tags:['3 غرف','3 حمامات','صالة واسعة','مطبخ مجهز'],license:{platform:'Airbnb',owner:'قيد المراجعة',compound:'قيد المراجعة',hh:'قيد الإجراء',num:'',submitted:'',issued:'',expiry:'',docs:'غير متحقق',next:''}},
+  {id:'u301',name:'شقة 301',beds:3,baths:3,status:'متاحة',clean:'clean',ownership:'rent',landlordRent:0,priceNight:0,priceMonth:0,priceYear:0,photos:[],desc:'ثلاث غرف نوم وثلاثة حمامات بإضاءة جيدة.',tags:['3 غرف','3 حمامات','إضاءة جيدة'],license:{platform:'Airbnb',owner:'قيد المراجعة',compound:'قيد المراجعة',hh:'قيد الإجراء',num:'',submitted:'',issued:'',expiry:'',docs:'غير متحقق',next:''}},
+  {id:'u501',name:'شقة 501',beds:3,baths:3,status:'متاحة',clean:'clean',ownership:'own',landlordRent:0,priceNight:0,priceMonth:0,priceYear:0,photos:[],desc:'ثلاث غرف نوم وثلاثة حمامات.',tags:['3 غرف','3 حمامات'],license:{platform:'Airbnb',owner:'لا ينطبق',compound:'قيد المراجعة',hh:'قيد الإجراء',num:'',submitted:'',issued:'',expiry:'',docs:'غير متحقق',next:''}},
+  {id:'u1104',name:'شقة 1104',beds:3,baths:3,status:'قريباً',clean:'clean',ownership:'own',landlordRent:0,priceNight:0,priceMonth:0,priceYear:0,photos:[],desc:'وحدة مرتفعة، تتطلب حجزاً مسبقاً وتأكيد التواريخ واتساب.',tags:['3 غرف','3 حمامات','حجز مسبق'],license:{platform:'Airbnb',owner:'لا ينطبق',compound:'قيد المراجعة',hh:'قيد الإجراء',num:'',submitted:'',issued:'',expiry:'',docs:'غير متحقق',next:''}}
+];}
+const TEMPLATES=[
+ {name:'رد أول على الاستفسار',text:'أهلاً بحضرتك 🌷\nشقتنا مفروشة بالكامل في المهندسين، ميدان لبنان.\nمتاحة من [تاريخ الدخول] إلى [تاريخ الخروج] بسعر [..] جنيه لليلة.\nتحب أبعتلك الصور والتفاصيل؟'},
+ {name:'شروط الحجز والدفع',text:'للتأكيد نحتاج مقدم [..] جنيه، والباقي عند الاستلام.\nمطلوب صورة بطاقة أو جواز سفر لكل نزيل قبل الدخول.\nموعد الدخول من [..] والخروج [..].'},
+ {name:'تأكيد الحجز وتعليمات الوصول',text:'تم تأكيد حجزك ✅\nالشقة: [اسم الشقة]\nالعنوان: [العنوان بالتفصيل]\nاللوكيشن: [رابط جوجل ماب]\nموعد الوصول: [..]\nهيستقبلك [..] عند العمارة.'},
+ {name:'رسالة بعد الدخول بيوم',text:'أهلاً [اسم النزيل]، أتمنى الشقة عجبتك والإقامة مريحة 🌷\nلو محتاج أي حاجة قولي وهتتحل فوراً.'},
+ {name:'طلب تقييم بعد الخروج',text:'شكراً لإقامتك معنا يا [اسم النزيل] 🌷\nلو الإقامة عجبتك، رأيك في تقييم بسيط على [Airbnb / Booking] بيفرق معانا كتير.'},
+ {name:'وصف إعلان (عربي)','text':'شقة مفروشة بالكامل في قلب المهندسين، بجوار ميدان لبنان 📍\n• [عدد الغرف] غرف و[عدد الحمامات] حمام\n• [المميزات الفعلية: واي فاي، تكييف، مطبخ مجهز]\n• مناسبة للعائلات\nللحجز والاستفسار: [رقم الواتساب]'},
+ {name:'عرض للشركات (إيجار شهري)',text:'مرحباً [اسم الشخص]،\nعندنا شقق مفروشة بالكامل في المهندسين للإقامة الشهرية والسنوية للموظفين والزائرين، بعقد واضح وسعر ثابت.\nتحب أبعتلك التفاصيل والصور؟'}
+];
+
+let DB=null;
+function load(){ try{const raw=localStorage.getItem(LS_KEY); if(raw){DB=JSON.parse(raw);} }catch(e){}
+  if(!DB){DB={settings:defaultSettings(),apartments:defaultApartments(),bookings:[],expenses:[],tasks:[]};}
+  // ترحيل الرمز القديم النصي إلى بصمة مشفرة (النسخ القديمة فقط)
+  if(DB.settings && DB.settings.pin!==undefined){
+    if(DB.settings.pin && !DB.settings.pinHash){DB.settings.pinSalt=newSalt();DB.settings.pinHash=pinHashOf(String(DB.settings.pin),DB.settings.pinSalt);}
+    delete DB.settings.pin;
+  }
+  save(); }
+function save(){ localStorage.setItem(LS_KEY,JSON.stringify(DB)); }
+
+// رمز دخول المضيف: لا يوجد رمز افتراضي؛ يُنشئه المستخدم في أول دخول ويُحفظ كبصمة فقط
+function newSalt(){return Math.random().toString(36).slice(2)+Date.now().toString(36);}
+function cyrb53(str,seed){seed=seed||0;let h1=0xdeadbeef^seed,h2=0x41c6ce57^seed;for(let i=0;i<str.length;i++){const ch=str.charCodeAt(i);h1=Math.imul(h1^ch,2654435761);h2=Math.imul(h2^ch,1597334677);}h1=Math.imul(h1^(h1>>>16),2246822507);h1^=Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507);h2^=Math.imul(h1^(h1>>>13),3266489909);return (h2>>>0).toString(36)+(h1>>>0).toString(36);}
+function pinHashOf(pin,salt){return cyrb53(salt+'|'+pin)+':'+cyrb53(pin+'|'+salt,7);}
+
+// ============ أدوات ============
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const today=()=>iso(new Date());
+const addDays=(s,n)=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return iso(d);};
+const nights=(a,b)=>Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000);
+const fmt=n=>Number(n||0).toLocaleString('en-EG');
+const monthStart=s=>s.slice(0,8)+'01';
+const curMonth=()=>today().slice(0,7);
+function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2200);}
+function uid(){return 'x'+Date.now().toString(36)+Math.floor(Math.random()*999);}
+function aptName(id){const a=DB.apartments.find(a=>a.id===id);return a?a.name:'—';}
+function activeBk(b){return b.status!=='ملغي';}
+function overlap(a,inD,outD,ignoreId){return DB.bookings.some(b=>activeBk(b)&&b.apt===a&&b.id!==ignoreId&&b.in<outD&&inD<b.out);}
+
+// ============ واجهة الضيوف ============
+function guestView(){
+  const s=DB.settings;
+  const apts=DB.apartments.map(a=>{
+    const ph=a.photos&&a.photos.length?`<img src="${esc(a.photos[0].src)}" alt="${esc(a.photos[0].alt||a.name)}" style="width:100%;height:190px;object-fit:cover;border-radius:14px">`:`<div style="width:100%;height:190px;border-radius:14px;background:#e7efec;display:flex;align-items:center;justify-content:center;font-size:34px">🏨</div>`;
+    const price=a.priceNight?`<div style="font-weight:800;color:#0f766e;font-size:18px">${fmt(a.priceNight)} ج.م <span style="font-size:12px;color:#8a8486">/ ليلة</span></div>`:'<div style="font-size:13px;color:#8a8486">السعر عند الاستفسار</div>';
+    return `<div class="card" style="padding:14px;margin-bottom:14px">${ph}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+        <div><div style="font-weight:800;font-size:17px">${esc(a.name)}</div>
+        <div style="font-size:13px;color:#585254">${esc((a.tags||[]).join(' · '))}</div></div>${price}</div>
+      <div style="font-size:14px;color:#585254;margin-top:6px">${esc(a.desc||'')}</div>
+      <a class="btn" style="display:block;text-align:center;text-decoration:none;margin-top:10px" target="_blank" href="https://api.whatsapp.com/send?phone=${encodeURIComponent(s.wa)}&text=${encodeURIComponent('أهلاً، حابب أستفسر عن '+a.name+' في ميدان لبنان')}">استفسر على واتساب</a>
+    </div>`;}).join('');
+  return `
+  <div style="max-width:520px;margin:0 auto;padding:16px 14px 110px">
+    <div style="text-align:center;padding:26px 0 8px">
+      <div style="font-size:26px;font-weight:800">لبنان استور</div>
+      <div style="color:#585254;font-size:14px">شقق مفروشة بالكامل · ميدان لبنان، المهندسين</div>
+    </div>
+    <div class="card" style="padding:12px 14px;margin:10px 0 16px;font-size:13px;color:#585254">
+      📍 ${esc(s.address)} · أقل حجز ${s.minNights} ليالٍ · دخول ${esc(s.checkIn)}
+    </div>
+    ${apts}
+    <div class="card" style="padding:14px;margin-top:8px">
+      <div style="font-weight:800;margin-bottom:6px">الضمانات</div>
+      <div style="font-size:14px;color:#585254;line-height:1.9">✨ نظافة وتعقيم قبل كل حجز<br>🛏️ بياضات نظيفة ومطبخ مرتب<br>📶 واي فاي منزلي سريع<br>❄️ تكييف في الصالة والغرف</div>
+      <div style="font-size:13px;color:#8a8486;margin-top:10px">${esc(s.policyNote)}</div>
+      <div style="font-size:13px;color:#8a8486;margin-top:6px">${esc(s.payNote)}</div>
+      <div style="font-size:13px;color:#8a8486;margin-top:6px">${esc(s.priceNote)}</div>
+    </div>
+    <div style="text-align:center;margin-top:14px">
+      <button class="btn3" onclick="askPin()">دخول المضيف</button>
+    </div>
+  </div>`;
+}
+function askPin(){
+  if(!DB.settings.pinHash){
+    showModal(`<div style="font-weight:800;font-size:17px;margin-bottom:8px">إنشاء رمز دخول</div>
+      <div style="font-size:13px;color:#666;margin-bottom:10px">هذا أول دخول للوحة المضيف من هذا الجهاز. أنشئ رمزاً من 4 إلى 8 أرقام واحفظه جيداً — لا يوجد رمز افتراضي.</div>
+      <label>رمز الدخول الجديد</label>
+      <input id="pinNew" class="inp" type="password" inputmode="numeric" maxlength="8" dir="ltr">
+      <label>تأكيد الرمز الجديد</label>
+      <input id="pinNew2" class="inp" type="password" inputmode="numeric" maxlength="8" dir="ltr">
+      <button class="btn" style="width:100%;margin-top:14px" onclick="createPin()">حفظ الرمز ودخول</button>`);
+    setTimeout(()=>{const i=$('#pinNew');if(i)i.focus();},100);
+    return;
+  }
+  showModal(`<div style="font-weight:800;font-size:17px;margin-bottom:8px">دخول المضيف</div>
+    <label>رمز الدخول</label>
+    <input id="pinIn" class="inp" type="password" inputmode="numeric" maxlength="8" dir="ltr">
+    <button class="btn" style="width:100%;margin-top:14px" onclick="tryPin()">دخول</button>`);
+  setTimeout(()=>{const i=$('#pinIn');if(i)i.focus();},100);
+}
+function enterHost(){closeModal();state.view='host';state.tab='dash';render();}
+function createPin(){
+  const a=$('#pinNew').value.trim(),b=$('#pinNew2').value.trim();
+  if(!/^\d{4,8}$/.test(a))return toast('الرمز لازم يكون من 4 إلى 8 أرقام');
+  if(a!==b)return toast('الرمزان غير متطابقين');
+  DB.settings.pinSalt=newSalt();DB.settings.pinHash=pinHashOf(a,DB.settings.pinSalt);save();
+  enterHost();toast('تم إنشاء رمز الدخول ✅');
+}
+function tryPin(){ const s=DB.settings; if(s.pinHash && pinHashOf($('#pinIn').value,s.pinSalt)===s.pinHash){enterHost();} else toast('الرمز غير صحيح'); }
+function askChangePin(){
+  showModal(`<div style="font-weight:800;font-size:17px;margin-bottom:8px">تغيير رمز الدخول</div>
+    <label>الرمز الحالي</label>
+    <input id="pinCur" class="inp" type="password" inputmode="numeric" maxlength="8" dir="ltr">
+    <label>الرمز الجديد (4 إلى 8 أرقام)</label>
+    <input id="pinNew" class="inp" type="password" inputmode="numeric" maxlength="8" dir="ltr">
+    <label>تأكيد الرمز الجديد</label>
+    <input id="pinNew2" class="inp" type="password" inputmode="numeric" maxlength="8" dir="ltr">
+    <button class="btn" style="width:100%;margin-top:14px" onclick="changePin()">تغيير الرمز</button>`);
+  setTimeout(()=>{const i=$('#pinCur');if(i)i.focus();},100);
+}
+function changePin(){
+  const s=DB.settings,cur=$('#pinCur').value,a=$('#pinNew').value.trim(),b=$('#pinNew2').value.trim();
+  if(s.pinHash && pinHashOf(cur,s.pinSalt)!==s.pinHash)return toast('الرمز الحالي غير صحيح');
+  if(!/^\d{4,8}$/.test(a))return toast('الرمز الجديد لازم يكون من 4 إلى 8 أرقام');
+  if(a!==b)return toast('الرمزان غير متطابقين');
+  s.pinSalt=newSalt();s.pinHash=pinHashOf(a,s.pinSalt);save();closeModal();toast('تم تغيير رمز الدخول ✅');
+}
+
+// ============ واجهة المضيف ============
+const TABS=[['dash','الرئيسية'],['bookings','الحجوزات'],['cal','التقويم'],['money','الماليات'],['lic','التراخيص'],['tools','أدوات']];
+function hostView(){
+  const tabs=TABS.map(t=>`<div class="tabbtn ${state.tab===t[0]?'on':''}" onclick="state.tab='${t[0]}';render()">${t[1]}</div>`).join('');
+  let body='';
+  if(state.tab==='dash')body=dashView();
+  else if(state.tab==='bookings')body=bookingsView();
+  else if(state.tab==='cal')body=calView();
+  else if(state.tab==='money')body=moneyView();
+  else if(state.tab==='lic')body=licView();
+  else body=toolsView();
+  return `<div style="max-width:640px;margin:0 auto;padding:12px 12px 110px">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px 12px">
+      <div style="font-weight:800;font-size:18px">🏨 إدارة الشقق</div>
+      <button class="btn3" onclick="state.view='guest';render()">صفحة الضيوف</button>
+    </div>
+    <div style="display:flex;gap:4px;background:#fff;border:1px solid #eae9ea;border-radius:14px;padding:4px;margin-bottom:14px">${tabs}</div>
+    ${body}</div>`;
+}
+
+function smartAlerts(){
+  const al=[];const t=today();
+  DB.apartments.forEach(a=>{
+    const busy=DB.bookings.some(b=>activeBk(b)&&b.apt===a.id&&b.in<=addDays(t,7)&&b.out>t);
+    if(!busy)al.push({txt:`${a.name} فاضية الأسبوع الجاي كله. ممكن تعمل عرض أو تنشر لينك الضيوف.`});
+    if(a.clean==='dirty')al.push({txt:`${a.name} محتاجة تنضيف.`});
+    const ex=a.license&&a.license.expiry;
+    if(ex&&ex>=t&&ex<=addDays(t,60))al.push({txt:`ترخيص ${a.name} بينتهي في ${ex}. راجع ورقة التراخيص.`});
+    if(a.license&&(a.license.hh==='غير مرخص'))al.push({txt:`${a.name} غير مرخصة كـ Holiday Home.`});
+  });
+  DB.bookings.filter(b=>activeBk(b)&&b.status!=='انتهى'&&(Number(b.total||0)-Number(b.paid||0))>0&&b.in<=t)
+    .forEach(b=>al.push({txt:`متبقي ${fmt(Number(b.total||0)-Number(b.paid||0))} ج.م على حجز ${b.name} (${aptName(b.apt)}).`}));
+  return al;
+}
+
+function dashView(){
+  const t=today(),m=curMonth();
+  const mb=DB.bookings.filter(b=>activeBk(b)&&b.in.slice(0,7)===m);
+  const rev=mb.reduce((s,b)=>s+Number(b.total||0),0);
+  const dim=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),0).getDate();
+  let booked=0;
+  DB.bookings.filter(activeBk).forEach(b=>{
+    const s=b.in<monthStart(m)?monthStart(m):b.in; const e=b.out>addDays(monthStart(m),dim)?addDays(monthStart(m),dim):b.out;
+    if(s<e)booked+=nights(s,e);
+  });
+  const occ=DB.apartments.length?Math.round(booked*100/(dim*DB.apartments.length)):0;
+  const arr=DB.bookings.filter(b=>activeBk(b)&&b.in===t);
+  const dep=DB.bookings.filter(b=>activeBk(b)&&b.out===t);
+  const alerts=smartAlerts();
+  const cleanBoard=DB.apartments.map(a=>`<div class="card" style="padding:10px;text-align:center;cursor:pointer" onclick="toggleClean('${a.id}')">
+    <div style="font-weight:700">${esc(a.name)}</div>
+    <div style="font-size:20px;margin:4px 0">${a.clean==='clean'?'✨':'🧹'}</div>
+    <div style="font-size:12px;color:${a.clean==='clean'?'#0f766e':'#b45309'};font-weight:700">${a.clean==='clean'?'جاهزة':'محتاجة تنضيف'}</div></div>`).join('');
+  return `
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+    <div class="card" style="padding:12px;text-align:center"><div style="font-size:12px;color:#8a8486">إيراد الشهر</div><div style="font-weight:800;font-size:17px">${fmt(rev)}</div><div style="font-size:11px;color:#8a8486">ج.م</div></div>
+    <div class="card" style="padding:12px;text-align:center"><div style="font-size:12px;color:#8a8486">الإشغال</div><div style="font-weight:800;font-size:17px">${occ}%</div><div style="font-size:11px;color:#8a8486">هذا الشهر</div></div>
+    <div class="card" style="padding:12px;text-align:center"><div style="font-size:12px;color:#8a8486">حجوزات الشهر</div><div style="font-weight:800;font-size:17px">${mb.length}</div><div style="font-size:11px;color:#8a8486">حجز</div></div>
+  </div>
+  <div class="card" style="padding:14px;margin-top:12px"><div style="font-weight:800">وصول النهاردة</div>
+    ${arr.length?arr.map(b=>`<div style="font-size:14px;padding:5px 0">🛬 ${esc(b.name)} · ${aptName(b.apt)} · <a style="color:#0f766e" href="https://wa.me/${esc(b.phone)}" target="_blank">واتساب</a></div>`).join(''):'<div style="color:#8a8486;font-size:14px">لا يوجد</div>'}
+    <div style="font-weight:800;margin-top:8px">مغادرة النهاردة</div>
+    ${dep.length?dep.map(b=>`<div style="font-size:14px;padding:5px 0">🧳 ${esc(b.name)} · ${aptName(b.apt)} <button class="btn3" style="padding:3px 10px;font-size:12px" onclick="toggleClean('${b.apt}',1)">سجّل تنضيف</button></div>`).join(''):'<div style="color:#8a8486;font-size:14px">لا يوجد</div>'}
+  </div>
+  <div style="font-weight:800;margin:14px 0 8px">حالة النضافة</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${cleanBoard}</div>
+  <div style="font-weight:800;margin:14px 0 2px">💡 تنبيهات ذكية</div>
+  ${alerts.length?alerts.map(a=>`<div class="alertRow">💡 <div>${esc(a.txt)}</div></div>`).join(''):'<div class="card" style="padding:12px;color:#8a8486;font-size:14px;margin-top:8px">لا توجد تنبيهات.</div>'}
+  <button class="btn2" style="width:100%;margin-top:16px" onclick="guestLink()">🔗 نسخ لينك صفحة الضيوف</button>`;
+}
+function toggleClean(id,dirty){const a=DB.apartments.find(a=>a.id===id);if(!a)return;a.clean=dirty?'dirty':(a.clean==='clean'?'dirty':'clean');save();render();toast(a.name+': '+(a.clean==='clean'?'جاهزة':'محتاجة تنضيف'));}
+function guestLink(){const u=location.href.split('#')[0];copyText(u);toast('اتنسخ اللينك');}
+
+// ============ الحجوزات ============
+function bookingsView(){
+  const list=[...DB.bookings].sort((a,b)=>b.in.localeCompare(a.in)).map(b=>{
+    const rem=Number(b.total||0)-Number(b.paid||0);
+    const stChip=b.status==='ملغي'?'bad':(b.status==='انتهى'?'':'warn');
+    return `<div class="card" style="padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:800">${esc(b.name)}</div>
+        <span class="chip ${stChip}">${esc(b.status)}</span></div>
+      <div style="font-size:13px;color:#585254;margin-top:4px">${aptName(b.apt)} · ${b.in} ← ${b.out} · ${nights(b.in,b.out)} ليالي · ${esc(b.channel||'مباشر')}${b.commission?` · عمولة ${fmt(b.commission)}`:''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:14px">
+        <div>الإجمالي <b>${fmt(b.total)}</b> · المدفوع <b style="color:#0f766e">${fmt(b.paid)}</b> · المتبقي <b style="color:${rem>0?'#c81e2b':'#0f766e'}">${fmt(rem)}</b></div>
+        <div style="display:flex;gap:6px">
+          ${rem>0&&b.status!=='ملغي'?`<button class="btn2" style="padding:4px 10px;font-size:12px" onclick="collect('${b.id}')">تم التحصيل</button>`:''}
+          <button class="btn3" style="padding:4px 10px;font-size:12px" onclick="editBooking('${b.id}')">تعديل</button>
+        </div></div>
+      ${b.note?`<div style="font-size:12px;color:#8a8486;margin-top:4px">${esc(b.note)}</div>`:''}
+    </div>`;}).join('');
+  return `<button class="btn" style="width:100%;margin-bottom:12px" onclick="editBooking()">+ إضافة حجز</button>
+    ${list||'<div class="card" style="padding:16px;text-align:center;color:#8a8486">لا توجد حجوزات بعد.</div>'}
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn3" style="flex:1" onclick="exportBookingsCSV()">تصدير الحجوزات Excel</button>
+      <button class="btn3" style="flex:1" onclick="importICS()">استيراد تقويم Airbnb (ics)</button>
+    </div>`;
+}
+function collect(id){const b=DB.bookings.find(b=>b.id===id);if(!b)return;b.paid=b.total;save();render();toast('تم تسجيل التحصيل ✅');}
+function editBooking(id){
+  const b=id?DB.bookings.find(b=>b.id===id):{id:uid(),apt:DB.apartments[0]&&DB.apartments[0].id,name:'',phone:'',type:'يومي',in:today(),out:addDays(today(),3),total:'',paid:0,channel:'واتساب',commission:0,status:'مؤكد',note:''};
+  const opts=(arr,v)=>arr.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('');
+  const aptOpts=DB.apartments.map(a=>`<option value="${a.id}" ${a.id===b.apt?'selected':''}>${esc(a.name)}</option>`).join('');
+  showModal(`<div style="font-weight:800;font-size:17px;margin-bottom:6px">${id?'تعديل حجز':'حجز جديد'}</div>
+    <label>الشقة</label><select id="bkApt" class="inp">${aptOpts}</select>
+    <label>اسم النزيل</label><input id="bkName" class="inp" value="${esc(b.name)}">
+    <label>الموبايل (بالكود الدولي)</label><input id="bkPhone" class="inp" dir="ltr" value="${esc(b.phone||'')}">
+    <div style="display:flex;gap:8px"><div style="flex:1"><label>نوع الإيجار</label><select id="bkType" class="inp">${opts(['يومي','شهري','سنوي'],b.type)}</select></div>
+    <div style="flex:1"><label>القناة</label><select id="bkCh" class="inp">${opts(CHANNELS,b.channel)}</select></div></div>
+    <div style="display:flex;gap:8px"><div style="flex:1"><label>الدخول</label><input id="bkIn" type="date" class="inp" value="${b.in}"></div>
+    <div style="flex:1"><label>الخروج</label><input id="bkOut" type="date" class="inp" value="${b.out}"></div></div>
+    <div style="display:flex;gap:8px"><div style="flex:1"><label>الإجمالي المتفق عليه (ج.م)</label><input id="bkTotal" type="number" class="inp" value="${b.total}"></div>
+    <div style="flex:1"><label>المدفوع (ج.م)</label><input id="bkPaid" type="number" class="inp" value="${b.paid}"></div></div>
+    <div style="display:flex;gap:8px"><div style="flex:1"><label>عمولة الوسيط (ج.م)</label><input id="bkCom" type="number" class="inp" value="${b.commission||0}"></div>
+    <div style="flex:1"><label>الحالة</label><select id="bkStatus" class="inp">${opts(BK_STATUS,b.status)}</select></div></div>
+    <label>ملاحظات</label><input id="bkNote" class="inp" value="${esc(b.note||'')}">
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn" style="flex:1" onclick="saveBooking('${b.id}',${id?1:0})">حفظ الحجز</button>
+      ${id?`<button class="btn3" style="color:#c81e2b" onclick="delBooking('${b.id}')">حذف</button>`:''}
+    </div>`);
+}
+function saveBooking(id,isEdit){
+  const b={id,apt:$('#bkApt').value,name:$('#bkName').value.trim(),phone:$('#bkPhone').value.trim(),type:$('#bkType').value,in:$('#bkIn').value,out:$('#bkOut').value,total:Number($('#bkTotal').value||0),paid:Number($('#bkPaid').value||0),channel:$('#bkCh').value,commission:Number($('#bkCom').value||0),status:$('#bkStatus').value,note:$('#bkNote').value.trim(),createdAt:Date.now()};
+  if(!b.name||!b.in||!b.out||b.out<=b.in){toast('راجع الاسم والتواريخ');return;}
+  if(b.status!=='ملغي'&&overlap(b.apt,b.in,b.out,isEdit?id:null)){toast('في حجز متعارض على نفس الشقة في التواريخ دي');return;}
+  if(isEdit){const i=DB.bookings.findIndex(x=>x.id===id);DB.bookings[i]=Object.assign(DB.bookings[i],b);}else DB.bookings.push(b);
+  save();closeModal();render();toast('اتحفظ الحجز ✅');
+}
+function delBooking(id){const b=DB.bookings.find(b=>b.id===id);if(!b)return;b.status='ملغي';save();closeModal();render();toast('اتلغى الحجز');}
+function exportBookingsCSV(){
+  const head='الشقة,اسم النزيل,الموبايل,النوع,الدخول,الخروج,الليالي,الإجمالي,المدفوع,المتبقي,القناة,عمولة الوسيط,الحالة,ملاحظات';
+  const rows=DB.bookings.map(b=>[aptName(b.apt),b.name,b.phone,b.type,b.in,b.out,nights(b.in,b.out),b.total,b.paid,Number(b.total||0)-Number(b.paid||0),b.channel,b.commission||0,b.status,(b.note||'').replace(/,/g,'،')].join(','));
+  download('حجوزات-لبنان-استور.csv','\ufeff'+head+'\n'+rows.join('\n'),'text/csv');
+}
+function importICS(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.ics';
+  inp.onchange=()=>{const f=inp.files[0];if(f)handleICSFile(f);};
+  inp.click();
+}
+function handleICSFile(f){
+  const r=new FileReader();
+    r.onload=()=>{const txt=r.result;let added=0;
+      const evs=txt.split('BEGIN:VEVENT').slice(1);
+      const apt=DB.apartments[0];
+      evs.forEach(ev=>{
+        const ds=(ev.match(/DTSTART[^:]*:(\d{8})/)||[])[1], de=(ev.match(/DTEND[^:]*:(\d{8})/)||[])[1];
+        if(!ds||!de)return;
+        const din=ds.slice(0,4)+'-'+ds.slice(4,6)+'-'+ds.slice(6,8), dout=de.slice(0,4)+'-'+de.slice(4,6)+'-'+de.slice(6,8);
+        if(DB.bookings.some(b=>b.apt===apt.id&&b.in===din&&b.out===dout))return;
+        if(overlap(apt.id,din,dout,null))return;
+        DB.bookings.push({id:uid(),apt:apt.id,name:'حجز Airbnb',phone:'',type:'يومي',in:din,out:dout,total:0,paid:0,channel:'Airbnb',commission:0,status:'مؤكد',note:'مستورد من تقويم Airbnb، راجع التفاصيل على لوحة المضيف',createdAt:Date.now()});added++;
+      });
+      save();render();toast(added?`اتضاف ${added} حجز من Airbnb`:'مفيش حجوزات جديدة في الملف');};
+    r.readAsText(f);
+}
+
+// ============ التقويم ============
+let calMonth=curMonth();
+function calView(){
+  const y=Number(calMonth.slice(0,4)),mo=Number(calMonth.slice(5,7));
+  const first=monthStart(calMonth);const dim=new Date(y,mo,0).getDate();
+  const startDow=(new Date(first+'T12:00:00').getDay()+1)%7; // السبت أول الأسبوع
+  let cells='';
+  for(let i=0;i<startDow;i++)cells+='<div></div>';
+  for(let d=1;d<=dim;d++){
+    const ds=calMonth+'-'+String(d).padStart(2,'0');
+    const bars=DB.bookings.filter(b=>activeBk(b)&&b.in<=ds&&ds<b.out)
+      .map(b=>`<div class="calbar" style="background:${b.status==='مؤكد'?'#0f766e':'#b45309'}" title="${esc(b.name)}">${aptName(b.apt)}</div>`).join('');
+    const isT=ds===today();
+    cells+=`<div class="calcell" style="${isT?'border:2px solid #0f766e':''}"><b>${d}</b>${bars}</div>`;
+  }
+  return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <button class="btn3" onclick="calShift(-1)">◀ السابق</button>
+    <div style="font-weight:800">${calMonth}</div>
+    <button class="btn3" onclick="calShift(1)">التالي ▶</button></div>
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:11px;text-align:center;color:#8a8486;margin-bottom:3px"><div>سبت</div><div>أحد</div><div>اثنين</div><div>ثلاثاء</div><div>أربعاء</div><div>خميس</div><div>جمعة</div></div>
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">${cells}</div>`;
+}
+function calShift(n){const y=Number(calMonth.slice(0,4)),mo=Number(calMonth.slice(5,7))+n;const d=new Date(y,mo-1,1);calMonth=iso(d).slice(0,7);render();}
+
+// ============ الماليات ============
+let repMonth=curMonth();
+function moneyView(){
+  const m=repMonth;
+  const exps=DB.expenses.filter(e=>e.date&&e.date.slice(0,7)===m).sort((a,b)=>b.date.localeCompare(a.date));
+  const expList=exps.map(e=>`<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:1px solid #f2efed">
+    <div>${e.date} · ${aptName(e.apt)} · ${esc(e.cat)}${e.note?` · <span style="color:#8a8486">${esc(e.note)}</span>`:''}</div>
+    <div style="display:flex;gap:8px;align-items:center"><b>${fmt(e.amount)}</b><button class="btn3" style="padding:2px 8px;font-size:11px" onclick="delExp('${e.id}')">حذف</button></div></div>`).join('');
+  // التقرير الشهري
+  let rows='',tot={n:0,ni:0,rev:0,com:0,exp:0,rent:0,net:0};
+  DB.apartments.forEach(a=>{
+    const bs=DB.bookings.filter(b=>activeBk(b)&&b.apt===a.id&&b.in.slice(0,7)===m);
+    const ni=bs.reduce((s,b)=>s+nights(b.in,b.out),0);
+    const rev=bs.reduce((s,b)=>s+Number(b.total||0),0);
+    const com=bs.reduce((s,b)=>s+Number(b.commission||0),0);
+    const exp=DB.expenses.filter(e=>e.apt===a.id&&e.date.slice(0,7)===m).reduce((s,e)=>s+Number(e.amount||0),0);
+    const rent=a.ownership==='rent'?Number(a.landlordRent||0):0;
+    const net=rev-com-exp-rent;
+    tot.n+=bs.length;tot.ni+=ni;tot.rev+=rev;tot.com+=com;tot.exp+=exp;tot.rent+=rent;tot.net+=net;
+    rows+=`<tr><td>${esc(a.name)}</td><td>${bs.length}</td><td>${ni}</td><td>${fmt(rev)}</td><td>${fmt(com)}</td><td>${fmt(exp)}</td><td>${fmt(rent)}</td><td style="font-weight:800;color:${net<0?'#c81e2b':'#0f766e'}">${fmt(net)}</td></tr>`;
+  });
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <button class="btn3" onclick="repShift(-1)">◀</button>
+    <div style="font-weight:800">شهر ${repMonth}</div>
+    <button class="btn3" onclick="repShift(1)">▶</button></div>
+  <div class="card" style="padding:12px;overflow-x:auto;margin-bottom:14px">
+    <div style="font-weight:800;margin-bottom:8px">التقرير الشهري لكل شقة</div>
+    <table class="rep"><tr><th>الشقة</th><th>حجوزات</th><th>ليالي</th><th>الإيراد</th><th>عمولات</th><th>مصاريف</th><th>إيجار المالك</th><th>صافي الربح</th></tr>
+    ${rows}
+    <tr style="background:#f8f5f3;font-weight:800"><td>الإجمالي</td><td>${tot.n}</td><td>${tot.ni}</td><td>${fmt(tot.rev)}</td><td>${fmt(tot.com)}</td><td>${fmt(tot.exp)}</td><td>${fmt(tot.rent)}</td><td style="color:${tot.net<0?'#c81e2b':'#0f766e'}">${fmt(tot.net)}</td></tr></table>
+    <div style="font-size:12px;color:#8a8486;margin-top:6px">الحجز بيتحسب على شهر تاريخ الدخول، والملغي مستبعد. الأرقام بالجنيه المصري.</div>
+  </div>
+  <div style="font-weight:800;margin-bottom:8px">مصاريف الشهر</div>
+  <button class="btn" style="width:100%;margin-bottom:10px" onclick="addExpense()">+ إضافة مصروف</button>
+  <div class="card" style="padding:12px">${expList||'<div style="color:#8a8486;font-size:14px">لا توجد مصاريف هذا الشهر.</div>'}</div>
+  <div style="font-weight:800;margin:16px 0 8px">إعدادات الشقق والأسعار</div>
+  <button class="btn2" style="width:100%" onclick="editApartments()">تعديل الشقق والملكية وإيجار الملاك</button>`;
+}
+function repShift(n){const y=Number(repMonth.slice(0,4)),mo=Number(repMonth.slice(5,7))+n;repMonth=iso(new Date(y,mo-1,1)).slice(0,7);render();}
+function addExpense(){
+  const aptOpts=DB.apartments.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  showModal(`<div style="font-weight:800;font-size:17px;margin-bottom:6px">مصروف جديد</div>
+    <label>التاريخ</label><input id="exDate" type="date" class="inp" value="${today()}">
+    <label>الشقة</label><select id="exApt" class="inp">${aptOpts}</select>
+    <label>البند</label><select id="exCat" class="inp">${EXP_CATS.map(c=>`<option>${c}</option>`).join('')}</select>
+    <label>المبلغ (ج.م)</label><input id="exAmt" type="number" class="inp">
+    <label>ملاحظات</label><input id="exNote" class="inp">
+    <button class="btn" style="width:100%;margin-top:14px" onclick="saveExpense()">حفظ</button>`);
+}
+function saveExpense(){
+  const amt=Number($('#exAmt').value||0);if(!amt){toast('اكتب المبلغ');return;}
+  DB.expenses.push({id:uid(),date:$('#exDate').value,apt:$('#exApt').value,cat:$('#exCat').value,amount:amt,note:$('#exNote').value.trim()});
+  save();closeModal();render();toast('اتحفظ المصروف ✅');
+}
+function delExp(id){DB.expenses=DB.expenses.filter(e=>e.id!==id);save();render();}
+function editApartments(){
+  const rows=DB.apartments.map((a,i)=>`<div class="card" style="padding:10px;margin-bottom:10px">
+    <div style="font-weight:800">${esc(a.name)}</div>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>الملكية</label><select class="inp" id="apOwn${i}"><option value="own" ${a.ownership==='own'?'selected':''}>ملك</option><option value="rent" ${a.ownership==='rent'?'selected':''}>إيجار</option></select></div>
+      <div style="flex:1"><label>إيجار المالك الشهري</label><input id="apRent${i}" type="number" class="inp" value="${a.landlordRent||0}"></div></div>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>سعر الليلة</label><input id="apN${i}" type="number" class="inp" value="${a.priceNight||0}"></div>
+      <div style="flex:1"><label>الشهري</label><input id="apM${i}" type="number" class="inp" value="${a.priceMonth||0}"></div>
+      <div style="flex:1"><label>السنوي</label><input id="apY${i}" type="number" class="inp" value="${a.priceYear||0}"></div></div>
+  </div>`).join('');
+  showModal(`<div style="font-weight:800;font-size:17px;margin-bottom:6px">الشقق والأسعار</div>${rows}
+    <button class="btn" style="width:100%;margin-top:8px" onclick="saveApartments(${DB.apartments.length})">حفظ</button>`);
+}
+function saveApartments(n){
+  for(let i=0;i<n;i++){const a=DB.apartments[i];
+    a.ownership=$('#apOwn'+i).value;a.landlordRent=Number($('#apRent'+i).value||0);
+    a.priceNight=Number($('#apN'+i).value||0);a.priceMonth=Number($('#apM'+i).value||0);a.priceYear=Number($('#apY'+i).value||0);}
+  save();closeModal();render();toast('اتحفظ ✅');
+}
+
+// ============ التراخيص ============
+function licView(){
+  const cards=DB.apartments.map(a=>{
+    const L=a.license||{};
+    const chip=L.hh==='مرخص'?'chip':(L.hh==='قيد الإجراء'?'chip warn':'chip bad');
+    return `<div class="card" style="padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:800">${esc(a.name)}</div><span class="${chip}">${esc(L.hh||'غير متحقق')}</span></div>
+      <div style="font-size:13px;color:#585254;margin-top:4px">المنصة: ${esc(L.platform||'—')} · موافقة المالك: ${esc(L.owner||'—')} · الكمبوند: ${esc(L.compound||'—')}</div>
+      <div style="font-size:13px;color:#585254">رقم الترخيص: ${esc(L.num||'—')} · الانتهاء/المراجعة: ${esc(L.expiry||'—')} · المستندات: ${esc(L.docs||'—')}</div>
+      ${L.next?`<div style="font-size:13px;color:#b45309;margin-top:4px">الخطوة التالية: ${esc(L.next)}</div>`:''}
+      <button class="btn3" style="margin-top:8px;font-size:13px" onclick="editLic('${a.id}')">تحديث الترخيص</button>
+    </div>`;}).join('');
+  return `<div class="card" style="padding:12px;margin-bottom:12px;font-size:14px;color:#585254">متابعة تراخيص Holiday Home وموافقات الملاك وإدارة الكمبوند لكل شقة. التنبيهات بتظهر في الصفحة الرئيسية قبل الانتهاء بـ 60 يوم.</div>${cards}`;
+}
+function editLic(id){
+  const a=DB.apartments.find(a=>a.id===id);const L=a.license=a.license||{};
+  const opts=(arr,v)=>arr.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('');
+  showModal(`<div style="font-weight:800;font-size:17px;margin-bottom:6px">ترخيص ${esc(a.name)}</div>
+    <label>المنصة/القنوات</label><select id="lcPlat" class="inp">${opts(['Airbnb','Booking.com','المنصتان','حجز مباشر','أخرى'],L.platform)}</select>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>موافقة المالك</label><select id="lcOwner" class="inp">${opts(YESNO,L.owner)}</select></div>
+      <div style="flex:1"><label>موافقة الكمبوند</label><select id="lcComp" class="inp">${opts(YESNO,L.compound)}</select></div></div>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>حالة Holiday Home</label><select id="lcHH" class="inp">${opts(LIC_STATUS,L.hh)}</select></div>
+      <div style="flex:1"><label>المستندات</label><select id="lcDocs" class="inp">${opts(DOC_STATUS,L.docs)}</select></div></div>
+    <label>رقم الترخيص/الطلب</label><input id="lcNum" class="inp" value="${esc(L.num||'')}">
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>تاريخ التقديم</label><input id="lcSub" type="date" class="inp" value="${L.submitted||''}"></div>
+      <div style="flex:1"><label>تاريخ الانتهاء/المراجعة</label><input id="lcExp" type="date" class="inp" value="${L.expiry||''}"></div></div>
+    <label>الخطوة التالية/ملاحظات</label><input id="lcNext" class="inp" value="${esc(L.next||'')}">
+    <button class="btn" style="width:100%;margin-top:14px" onclick="saveLic('${id}')">حفظ</button>`);
+}
+function saveLic(id){
+  const a=DB.apartments.find(a=>a.id===id);
+  a.license={platform:$('#lcPlat').value,owner:$('#lcOwner').value,compound:$('#lcComp').value,hh:$('#lcHH').value,docs:$('#lcDocs').value,num:$('#lcNum').value.trim(),submitted:$('#lcSub').value,expiry:$('#lcExp').value,next:$('#lcNext').value.trim()};
+  save();closeModal();render();toast('اتحفظ الترخيص ✅');
+}
+
+// ============ أدوات ============
+function toolsView(){
+  const tmpls=TEMPLATES.map((t,i)=>`<div class="card" style="padding:12px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-weight:800;font-size:14px">${esc(t.name)}</div>
+      <button class="btn2" style="padding:4px 12px;font-size:12px" onclick="copyTemplate(${i})">نسخ</button></div>
+    <div style="font-size:13px;color:#585254;white-space:pre-wrap;margin-top:6px">${esc(t.text)}</div></div>`).join('');
+  return `
+  <div style="font-weight:800;margin-bottom:8px">نصوص واتساب وإعلانات جاهزة</div>
+  ${tmpls}
+  <div style="font-weight:800;margin:16px 0 8px">كروت QR للشقق</div>
+  <button class="btn2" style="width:100%" onclick="qrCards()">عرض كروت الطباعة</button>
+  <div style="font-weight:800;margin:16px 0 8px">النسخ الاحتياطي والبيانات</div>
+  <div style="display:flex;gap:8px">
+    <button class="btn3" style="flex:1" onclick="exportJSON()">تصدير نسخة JSON</button>
+    <button class="btn3" style="flex:1" onclick="importJSON()">استيراد نسخة JSON</button>
+  </div>
+  <button class="btn3" style="width:100%;margin-top:8px" onclick="editSettings()">إعدادات عامة (واتساب، واي فاي)</button>
+  <div style="font-size:12px;color:#8a8486;margin-top:14px">البيانات محفوظة على هذا الجهاز وبتتزامن بالنسخ الاحتياطي JSON. خطوة جاية مقترحة: ربط قاعدة بيانات Supabase للمزامنة التلقائية بين الأجهزة.</div>`;
+}
+function copyTemplate(i){copyText(TEMPLATES[i].text);toast('اتنسخ النص ✅');}
+function copyText(t){
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).catch(()=>fallbackCopy(t));}
+  else fallbackCopy(t);
+}
+function fallbackCopy(t){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}ta.remove();}
+function qrCards(){
+  const s=DB.settings;
+  showModal(`<div style="font-weight:800;font-size:17px;margin-bottom:6px">كروت QR للشقق</div>
+    <div style="font-size:13px;color:#8a8486;margin-bottom:10px">كل كارت بيتطبع في صفحة لوحده. املأ اسم الواي فاي والباسورد من الإعدادات الأول.</div>
+    <div id="printArea">${DB.apartments.map((a,i)=>`
+      <div class="qrCard">
+        <div style="text-align:center;font-weight:800;font-size:18px">🏨 ${esc(a.name)} · لبنان استور</div>
+        <div style="display:flex;gap:14px;margin-top:14px;justify-content:center">
+          <div style="text-align:center"><div class="qrbox" id="qrw${i}"></div><div style="font-size:11px;margin-top:4px">📶 الواي فاي</div></div>
+          <div style="text-align:center"><div class="qrbox" id="qrc${i}"></div><div style="font-size:11px;margin-top:4px">💬 تواصل معنا</div></div>
+        </div>
+        <div style="font-size:13px;margin-top:12px">الشبكة: <b>${esc(s.wifiSsid||'—')}</b><br>الباسورد: <b dir="ltr">${esc(s.wifiPass||'—')}</b></div>
+        ${s.applianceNote?`<div style="font-size:12px;color:#585254;margin-top:8px">${esc(s.applianceNote)}</div>`:''}
+      </div>`).join('')}</div>
+    <button class="btn" style="width:100%;margin-top:10px" onclick="window.print()">طباعة (أو حفظ PDF)</button>`);
+  DB.apartments.forEach((a,i)=>{
+    try{
+      new QRCode($('#qrw'+i),{text:'WIFI:T:WPA;S:'+(s.wifiSsid||'')+';P:'+(s.wifiPass||'')+';;',width:96,height:96});
+      new QRCode($('#qrc'+i),{text:'https://wa.me/'+s.wa,width:96,height:96});
+    }catch(e){}
+  });
+}
+function exportJSON(){download('نسخة-احتياطية-لبنان-استور.json',JSON.stringify(DB,null,1),'application/json');}
+function importJSON(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json';
+  inp.onchange=()=>{const f=inp.files[0];if(f)handleJSONFile(f);};
+  inp.click();
+}
+function handleJSONFile(f){
+  const r=new FileReader();
+    r.onload=()=>{try{
+      const d=JSON.parse(r.result);
+      if(d.settings)DB.settings=Object.assign(defaultSettings(),d.settings);
+      if(Array.isArray(d.apartments))DB.apartments=d.apartments.map(a=>Object.assign({photos:[],clean:'clean',ownership:'rent',landlordRent:0,priceNight:0,priceMonth:0,priceYear:0,license:{}},a));
+      if(Array.isArray(d.bookings))DB.bookings=d.bookings.map(b=>Object.assign({commission:0,channel:'مباشر',type:'يومي',paid:0,total:0},b));
+      if(Array.isArray(d.expenses))DB.expenses=d.expenses;
+      save();render();toast('اتحملت النسخة ✅');
+    }catch(e){toast('الملف مش صالح');}};
+    r.readAsText(f);
+}
+function editSettings(){
+  const s=DB.settings;
+  showModal(`<div style="font-weight:800;font-size:17px;margin-bottom:6px">إعدادات عامة</div>
+    <label>رقم واتساب (بالكود الدولي)</label><input id="stWa" class="inp" dir="ltr" value="${esc(s.wa)}">
+    <label>العنوان</label><input id="stAddr" class="inp" value="${esc(s.address)}">
+    <label>اسم شبكة الواي فاي</label><input id="stSsid" class="inp" dir="ltr" value="${esc(s.wifiSsid)}">
+    <label>باسورد الواي فاي</label><input id="stPass" class="inp" dir="ltr" value="${esc(s.wifiPass)}">
+    <label>تعليمات تشغيل الأجهزة</label><input id="stApp" class="inp" value="${esc(s.applianceNote)}">
+    <button class="btn3" style="width:100%;margin-top:10px" onclick="askChangePin()">تغيير رمز دخول المضيف</button>
+    <button class="btn" style="width:100%;margin-top:14px" onclick="saveSettings()">حفظ الإعدادات</button>`);
+}
+function saveSettings(){
+  const s=DB.settings;
+  s.wa=$('#stWa').value.trim();s.address=$('#stAddr').value.trim();s.wifiSsid=$('#stSsid').value.trim();s.wifiPass=$('#stPass').value.trim();s.applianceNote=$('#stApp').value.trim();
+  save();closeModal();render();toast('اتحفظت الإعدادات ✅');
+}
+
+// ============ أساسيات ============
+function download(name,content,mime){
+  const b=new Blob([content],{type:mime+';charset=utf-8'});const u=URL.createObjectURL(b);
+  const a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),3000);
+}
+function showModal(html){$('#modalRoot').innerHTML=`<div class="modal" onclick="if(event.target===this)closeModal()"><div>${html}</div></div>`;}
+function closeModal(){$('#modalRoot').innerHTML='';}
+let state={view:'guest',tab:'dash'};
+function render(){$('#app').innerHTML=state.view==='guest'?guestView():hostView();}
+load();
+render();
+</script>
+</body>
+</html>
